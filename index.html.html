@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Labor Positioning Tool</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+        }
+    </style>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50">
+    <div id="app" class="p-4">
+        <div class="max-w-2xl mx-auto">
+            <!-- Header -->
+            <div class="text-center mb-6 pt-4">
+                <h1 class="text-3xl font-bold text-gray-800 mb-2">Labor Positioning Tool</h1>
+                <p class="text-gray-600">Evidence-based positioning support for physiological birth</p>
+            </div>
+
+            <!-- Content will be inserted here by JavaScript -->
+            <div id="content"></div>
+        </div>
+    </div>
+
+    <script>
+        // State management
+        let state = {
+            screen: 'disclaimer',
+            primaryConcern: '',
+            caseData: {},
+            recommendations: []
+        };
+
+        const primaryConcerns = [
+            { id: 'op', label: 'OP (Occiput Posterior) Baby Not Descending', icon: '🔄' },
+            { id: 'highStation', label: 'Baby at High Station & Not Engaging', icon: '⬆️' },
+            { id: 'asynclitic', label: 'Asynclitic Presentation', icon: '↔️' },
+            { id: 'slowDilation', label: 'Slow Dilation Despite Good Contractions', icon: '⏱️' },
+            { id: 'inadequateCtx', label: 'Frequent but Inadequate Contractions', icon: '📊' },
+            { id: 'cervicalLip', label: 'Cervical Lip', icon: '🔺' },
+            { id: 'prematureUrge', label: 'Urge to Push but Not Fully Dilated', icon: '💪' },
+            { id: 'tired', label: 'Exhausted Mother/Long Labor', icon: '😴' }
+        ];
+
+        function render() {
+            const content = document.getElementById('content');
+            
+            if (state.screen === 'disclaimer') {
+                content.innerHTML = `
+                    <div class="bg-white rounded-lg shadow-lg p-8">
+                        <div class="flex items-start mb-6">
+                            <svg class="text-yellow-500 mr-3 flex-shrink-0 mt-1" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <line x1="12" y1="8" x2="12" y2="12"></line>
+                                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                            </svg>
+                            <div>
+                                <h2 class="text-xl font-bold text-gray-800 mb-4">Important Disclaimer</h2>
+                                <div class="text-gray-700 space-y-3">
+                                    <p>This tool provides <strong>positioning suggestions only</strong> and is designed for use by trained birth workers (doulas, midwives, nurses, etc.).</p>
+                                    <p><strong>This is not medical advice.</strong> These recommendations are supportive positioning techniques based on optimal fetal positioning principles and physiological birth practices.</p>
+                                    <p>Always:</p>
+                                    <ul class="list-disc ml-6 space-y-1">
+                                        <li>Work within your scope of practice</li>
+                                        <li>Defer to medical providers for clinical decisions</li>
+                                        <li>Prioritize maternal comfort and informed consent</li>
+                                        <li>Stop any position if fetal heart rate is non-reassuring</li>
+                                    </ul>
+                                    <p class="font-semibold mt-4">By continuing, you acknowledge this tool is for positioning support only and does not replace clinical judgment or medical care.</p>
+                                </div>
+                            </div>
+                        </div>
+                        <button onclick="acceptDisclaimer()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors">
+                            I Understand - Continue to Tool
+                        </button>
+                    </div>
+                `;
+            } else if (state.screen === 'selectConcern') {
+                content.innerHTML = `
+                    <div class="bg-white rounded-lg shadow-lg p-6">
+                        <h2 class="text-2xl font-bold text-gray-800 mb-4">What is your primary concern?</h2>
+                        <p class="text-gray-600 mb-6">Select the main issue you're addressing right now:</p>
+                        <div class="space-y-3">
+                            ${primaryConcerns.map(concern => `
+                                <button onclick="selectConcern('${concern.id}')" class="w-full text-left p-4 border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-all flex items-center justify-between group">
+                                    <div class="flex items-center">
+                                        <span class="text-2xl mr-3">${concern.icon}</span>
+                                        <span class="text-gray-800 font-medium">${concern.label}</span>
+                                    </div>
+                                    <span class="text-gray-400 group-hover:text-blue-500">→</span>
+                                </button>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            } else if (state.screen === 'gatherInfo') {
+                const concern = primaryConcerns.find(c => c.id === state.primaryConcern);
+                const showStation = ['op', 'asynclitic', 'highStation', 'slowDilation'].includes(state.primaryConcern);
+                const showDilation = !['inadequateCtx'].includes(state.primaryConcern);
+                
+                content.innerHTML = `
+                    <div class="bg-white rounded-lg shadow-lg p-6">
+                        <h2 class="text-2xl font-bold text-gray-800 mb-4">Additional Information</h2>
+                        <p class="text-gray-600 mb-6">Primary concern: <strong>${concern.label}</strong></p>
+                        
+                        <div class="space-y-4">
+                            ${showStation ? `
+                            <div>
+                                <label class="block text-gray-700 font-semibold mb-2">Station</label>
+                                <select id="station" class="w-full p-3 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:outline-none">
+                                    <option value="">Select station...</option>
+                                    <option value="notEngaged">-3 or higher (not engaged)</option>
+                                    <option value="high">-2 to -1 (high)</option>
+                                    <option value="mid">0 to +1 (mid)</option>
+                                    <option value="low">+2 or lower (low)</option>
+                                </select>
+                            </div>
+                            ` : ''}
+                            
+                            ${showDilation ? `
+                            <div>
+                                <label class="block text-gray-700 font-semibold mb-2">Cervical Dilation</label>
+                                <select id="dilation" class="w-full p-3 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:outline-none">
+                                    <option value="">Select dilation...</option>
+                                    <option value="early">0-3 cm (early labor)</option>
+                                    <option value="active">4-7 cm (active labor)</option>
+                                    <option value="transition">8-9 cm (transition)</option>
+                                    <option value="complete">10 cm (complete)</option>
+                                </select>
+                            </div>
+                            ` : ''}
+                            
+                            <div>
+                                <label class="block text-gray-700 font-semibold mb-2">What has been tried so far?</label>
+                                <textarea id="tried" placeholder="E.g., hands and knees for 30 min, walking, birth ball..." class="w-full p-3 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:outline-none h-24"></textarea>
+                            </div>
+                            
+                            <div>
+                                <label class="block text-gray-700 font-semibold mb-2">Length of Labor</label>
+                                <input type="text" id="laborDuration" placeholder="E.g., 12 hours, 2 days..." class="w-full p-3 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:outline-none">
+                            </div>
+                            
+                            <div>
+                                <label class="block text-gray-700 font-semibold mb-2">Maternal Energy Level</label>
+                                <select id="energy" class="w-full p-3 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:outline-none">
+                                    <option value="">Select energy level...</option>
+                                    <option value="good">Good - able to move actively</option>
+                                    <option value="moderate">Moderate - needs rest periods</option>
+                                    <option value="exhausted">Exhausted - minimal energy</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <div class="flex gap-3 mt-6">
+                            <button onclick="goBack()" class="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-3 px-6 rounded-lg transition-colors">
+                                Back
+                            </button>
+                            <button onclick="submitInfo()" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors">
+                                Get Recommendations
+                            </button>
+                        </div>
+                    </div>
+                `;
+            } else if (state.screen === 'recommendations') {
+                const concern = primaryConcerns.find(c => c.id === state.primaryConcern);
+                
+                content.innerHTML = `
+                    <div class="space-y-4">
+                        <div class="bg-white rounded-lg shadow-lg p-6">
+                            <div class="flex items-center justify-between mb-4">
+                                <h2 class="text-2xl font-bold text-gray-800">Positioning Recommendations</h2>
+                                <button onclick="reset()" class="flex items-center gap-2 text-blue-600 hover:text-blue-700 font-semibold">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <polyline points="1 4 1 10 7 10"></polyline>
+                                        <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
+                                    </svg>
+                                    New Case
+                                </button>
+                            </div>
+                            <p class="text-gray-600 mb-2"><strong>Primary concern:</strong> ${concern.label}</p>
+                            ${state.caseData.station ? `<p class="text-gray-600 mb-2"><strong>Station:</strong> ${state.caseData.station}</p>` : ''}
+                            ${state.caseData.dilation ? `<p class="text-gray-600 mb-4"><strong>Dilation:</strong> ${state.caseData.dilation}</p>` : ''}
+                        </div>
+                        
+                        ${state.recommendations.map(rec => `
+                            <div class="rounded-lg shadow-lg p-6 ${rec.isWarning ? 'bg-yellow-50 border-2 border-yellow-300' : 'bg-white'}">
+                                <h3 class="text-xl font-bold text-gray-800 mb-2">${rec.title}</h3>
+                                <p class="text-gray-700 mb-2">${rec.description}</p>
+                                ${rec.duration ? `<p class="text-sm text-gray-600 italic"><strong>Duration:</strong> ${rec.duration}</p>` : ''}
+                            </div>
+                        `).join('')}
+                        
+                        <div class="bg-blue-50 border-2 border-blue-200 rounded-lg p-6">
+                            <h3 class="text-lg font-bold text-gray-800 mb-2">Next Steps</h3>
+                            <ul class="list-disc ml-6 text-gray-700 space-y-1">
+                                <li>Try first position for recommended duration</li>
+                                <li>Assess progress after each position change</li>
+                                <li>If no progress after full sequence, reassess primary concern</li>
+                                <li>Remember: hands and knees is always a good "reset"</li>
+                            </ul>
+                        </div>
+                        
+                        <button onclick="reset()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors flex items-center justify-center gap-2">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="1 4 1 10 7 10"></polyline>
+                                <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
+                            </svg>
+                            Start New Consultation
+                        </button>
+                    </div>
+                `;
+            }
+        }
+
+        function generateRecommendations(concern, data) {
+            let recs = [];
+
+            switch(concern) {
+                case 'op':
+                    recs.push({
+                        title: 'Primary Goal: Rotate Baby to Anterior',
+                        description: 'OP babies need to rotate to navigate the pelvis effectively. Posterior positions result in longer, more painful labors.'
+                    });
+                    
+                    if (data.station === 'high' || data.station === 'notEngaged') {
+                        recs.push({
+                            title: '1. Hands and Knees Position (Reset)',
+                            description: 'Start with hands and knees for 20-30 minutes to help baby find optimal position. This is your "reset" position.',
+                            duration: '20-30 minutes'
+                        });
+                        recs.push({
+                            title: '2. Side-Lying Release',
+                            description: 'Perform side-lying release on both sides to release pelvic tension and help baby engage at the inlet.',
+                            duration: '3 contractions per side'
+                        });
+                        recs.push({
+                            title: '3. Walchers Position',
+                            description: 'Use Walchers to encourage baby\'s head to engage into the pelvic brim.',
+                            duration: '3-5 contractions'
+                        });
+                    } else {
+                        recs.push({
+                            title: '1. Hands and Knees (Reset)',
+                            description: 'Begin with hands and knees position to encourage rotation.',
+                            duration: '20-30 minutes'
+                        });
+                        recs.push({
+                            title: '2. Extended Runner\'s Stretch',
+                            description: 'Side-lying in bed with top leg extended back (runner\'s position) to open posterior pelvis and encourage rotation.',
+                            duration: '15-20 minutes per side, start with side baby\'s back is on'
+                        });
+                        recs.push({
+                            title: '3. Upright Positioning',
+                            description: 'Standing, swaying, slow dancing, or supported squats to use gravity once baby begins rotating.',
+                            duration: 'As tolerated'
+                        });
+                    }
+                    break;
+
+                case 'asynclitic':
+                    recs.push({
+                        title: 'Goal: Achieve Anterior Asynclitism',
+                        description: 'Anterior asynclitism (front of head leading) is favorable. We want to encourage proper alignment for pelvic navigation.'
+                    });
+                    recs.push({
+                        title: '1. Hands and Knees (Reset)',
+                        description: 'Start here to reset baby\'s position and release asymmetric tension.',
+                        duration: '20-30 minutes'
+                    });
+                    recs.push({
+                        title: '2. Side-Lying Release',
+                        description: 'Critical for asynclitism - releases pelvic floor and ligament tension that may be causing tilt.',
+                        duration: '3 contractions each side'
+                    });
+                    recs.push({
+                        title: '3. Extended Runner\'s Position',
+                        description: 'Side-lying with top leg extended back. Choose the side opposite to where baby is tilted if known.',
+                        duration: '15-20 minutes'
+                    });
+                    recs.push({
+                        title: '4. Upright or Standing',
+                        description: 'After releases, use gravity with upright positions to encourage descent.',
+                        duration: 'As tolerated'
+                    });
+                    break;
+
+                case 'highStation':
+                    recs.push({
+                        title: 'Goal: Encourage Engagement at Pelvic Inlet',
+                        description: 'Baby needs to descend and engage. Focus on inlet-opening positions.'
+                    });
+                    recs.push({
+                        title: '1. Walchers Position',
+                        description: 'Lying back with bottom at edge of bed, legs dangling. Opens inlet and tips baby\'s head into brim.',
+                        duration: '3-5 contractions, monitor comfort'
+                    });
+                    recs.push({
+                        title: '2. Belly Binding/Sifting',
+                        description: 'After Walchers, use rebozo or sheet for abdominal sifting to help nestle baby\'s brow into pelvic brim.',
+                        duration: '10-15 minutes'
+                    });
+                    recs.push({
+                        title: '3. Side-Lying Release',
+                        description: 'Release pelvic tension that may be preventing engagement.',
+                        duration: '3 contractions per side'
+                    });
+                    recs.push({
+                        title: '4. Standing Pelvic Rocks',
+                        description: 'Gentle pelvic tilts and hip circles while standing to encourage engagement.',
+                        duration: '10-15 minutes'
+                    });
+                    break;
+
+                case 'slowDilation':
+                    recs.push({
+                        title: 'Consider: Is Baby\'s Position Affecting Dilation?',
+                        description: 'Good contractions without dilation often indicates positional issue or pelvic tension.'
+                    });
+                    recs.push({
+                        title: '1. Hands and Knees',
+                        description: 'Reset position - may help baby apply more even pressure to cervix.',
+                        duration: '20-30 minutes'
+                    });
+                    recs.push({
+                        title: '2. Side-Lying Release',
+                        description: 'Release pelvic floor tension that may be restricting dilation.',
+                        duration: '3 contractions each side'
+                    });
+                    recs.push({
+                        title: '3. Open Knee-Chest Position',
+                        description: 'Can help if baby is applying uneven pressure. Creates space and encourages repositioning.',
+                        duration: '15-20 minutes'
+                    });
+                    recs.push({
+                        title: '4. Active Movement',
+                        description: 'Lunges, stairs, curb walking to encourage optimal positioning for cervical pressure.',
+                        duration: 'As energy allows'
+                    });
+                    break;
+
+                case 'inadequateCtx':
+                    recs.push({
+                        title: 'Goal: Stimulate More Effective Contractions',
+                        description: 'Frequent but weak contractions may need positional change to become productive.'
+                    });
+                    recs.push({
+                        title: '1. Miles Circuit',
+                        description: 'Three-position sequence to stimulate labor: 1) Open knee-chest 30 min, 2) Exaggerated side-lying 30 min each side, 3) Slow walking.',
+                        duration: '2-2.5 hours total sequence'
+                    });
+                    recs.push({
+                        title: '2. Upright Positions with Movement',
+                        description: 'After circuit: standing, swaying, slow dancing, stair climbing to strengthen contractions.',
+                        duration: 'As tolerated'
+                    });
+                    recs.push({
+                        title: '3. Lunges',
+                        description: 'Deep lunges (supported) to open pelvis asymmetrically and stimulate stronger contractions.',
+                        duration: '10-12 per side'
+                    });
+                    recs.push({
+                        title: '4. Curb Walking',
+                        description: 'One foot on curb/step, one on ground. Walk sideways. Creates pelvic asymmetry and stimulation.',
+                        duration: '15-20 minutes'
+                    });
+                    break;
+
+                case 'cervicalLip':
+                    recs.push({
+                        title: 'Goal: Reduce Cervical Swelling & Encourage Even Dilation',
+                        description: 'Cervical lip often indicates positional issue - baby applying uneven pressure.'
+                    });
+                    recs.push({
+                        title: '1. Side-Lying on Side of Lip',
+                        description: 'Lie on the side where the lip is located to reduce pressure and swelling on that area.',
+                        duration: '20-30 minutes'
+                    });
+                    recs.push({
+                        title: '2. Knee-Chest Position',
+                        description: 'Takes pressure off cervix entirely, allows swelling to reduce.',
+                        duration: '15-20 minutes'
+                    });
+                    recs.push({
+                        title: '3. Hands and Knees',
+                        description: 'May help baby reposition to apply more even pressure.',
+                        duration: '15-20 minutes'
+                    });
+                    recs.push({
+                        title: '4. Consider Rest',
+                        description: 'Sometimes reducing pushing urge and resting allows lip to resolve naturally.',
+                        duration: 'As needed'
+                    });
+                    break;
+
+                case 'prematureUrge':
+                    recs.push({
+                        title: 'Goal: Manage Urge While Completing Dilation',
+                        description: 'Premature urge often from baby position (especially OP) putting pressure on rectum.'
+                    });
+                    recs.push({
+                        title: '1. Knee-Chest or Open Knee-Chest',
+                        description: 'Lifts baby off cervix and rectum, reduces urge while dilation completes.',
+                        duration: '15-30 minutes'
+                    });
+                    recs.push({
+                        title: '2. Avoid Upright Positions Temporarily',
+                        description: 'Gravity increases pressure. Use positions that lift baby away from cervix.',
+                        duration: 'Until dilation progresses'
+                    });
+                    recs.push({
+                        title: '3. Side-Lying',
+                        description: 'Less pressure than upright, more comfortable than knee-chest for sustained periods.',
+                        duration: 'As needed'
+                    });
+                    recs.push({
+                        title: '4. Breathing Through Urge',
+                        description: 'Slow release breaths rather than pushing. Once fully dilated, can begin guided pushing.',
+                        duration: 'Until complete dilation confirmed'
+                    });
+                    break;
+
+                case 'tired':
+                    recs.push({
+                        title: 'Goal: Rest & Reset While Maintaining Progress',
+                        description: 'Exhausted mother needs sustainable positions that allow rest while labor continues.'
+                    });
+                    recs.push({
+                        title: '1. Miles Circuit (if early labor)',
+                        description: 'If not yet active, Miles Circuit can stimulate progress and provide structured rest periods.',
+                        duration: '2-2.5 hours'
+                    });
+                    recs.push({
+                        title: '2. Side-Lying Rest Position',
+                        description: 'Allow mother to rest between contractions. Use peanut ball between legs for pelvic opening.',
+                        duration: 'As long as needed for rest'
+                    });
+                    recs.push({
+                        title: '3. Labor on Toilet (when rested)',
+                        description: 'Once rested, toilet sitting is effective for descent - natural squatting angle, releases pelvic floor.',
+                        duration: '15-20 minutes or as tolerated'
+                    });
+                    recs.push({
+                        title: '4. Birth Stool for Pushing',
+                        description: 'When ready to push, birth stool provides supported squat without exhausting leg muscles.',
+                        duration: 'During pushing phase'
+                    });
+                    recs.push({
+                        title: '5. Consider Therapeutic Rest',
+                        description: 'If available and appropriate, discuss therapeutic rest options with medical provider.',
+                        duration: 'As needed'
+                    });
+                    break;
+            }
+
+            recs.push({
+                title: '⚠️ Remember',
+                description: 'When in doubt, hands and knees is your reset position.',
+                isWarning: true
+            });
+
+            return recs;
+        }
+
+        function acceptDisclaimer() {
+            state.screen = 'selectConcern';
+            render();
+        }
+
+        function selectConcern(concernId) {
+            state.primaryConcern = concernId;
+            state.screen = 'gatherInfo';
+            state.caseData = {};
+            render();
+        }
+
+        function goBack() {
+            state.screen = 'selectConcern';
+            render();
+        }
+
+        function submitInfo() {
+            const station = document.getElementById('station');
+            const dilation = document.getElementById('dilation');
+            const tried = document.getElementById('tried');
+            const laborDuration = document.getElementById('laborDuration');
+            const energy = document.getElementById('energy');
+
+            state.caseData = {
+                station: station ? station.value : '',
+                dilation: dilation ? dilation.value : '',
+                tried: tried ? tried.value : '',
+                laborDuration: laborDuration ? laborDuration.value : '',
+                energy: energy ? energy.value : ''
+            };
+
+            state.recommendations = generateRecommendations(state.primaryConcern, state.caseData);
+            state.screen = 'recommendations';
+            render();
+        }
+
+        function reset() {
+            state = {
+                screen: 'selectConcern',
+                primaryConcern: '',
+                caseData: {},
+                recommendations: []
+            };
+            render();
+        }
+
+        // Initial render
+        render();
+    </script>
+</body>
+</html>
